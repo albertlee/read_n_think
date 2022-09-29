@@ -7,8 +7,9 @@
 
 Lexically-scoped block closures 是Smalltalk中的基础，用于分支、循环等的实现。Smalltalk中分支与循环是通过Library的方式实现的，而不是内置于语言实现的。
 
-在运行时，block 可以访问的变量被bound 在`定义它的Context`，而不是运行它的Context。
-
+重点：
+- 在运行时，block 可以访问的变量被bound 在`定义它的Context`，而不是运行它的Context。
+- 临时变量编译时进行分析，block中引用的会标记 escapingWrite ，在heap 上分配
 
 
 - Context: 表示程序执行点的Object。
@@ -265,7 +266,7 @@ twoBlockArrayB
 		  [ a := 2 ].
 		  [ a ] }
 ```
-
+编译后：
 ```
 label: 1
 createTempVectorNamed: '0vector0' withVars: #(#a)
@@ -281,4 +282,52 @@ returnTop
 
 - b 是普通的临时变量，popIntoTemp
 - a 在 block 中引用，使用的 popIntoRemoteTemp
+
+实现，参考 Opal Compiler，见 OCASTSemanticAnalyzer, OCASTClosureAnalyzer
+
+```smalltalk
+
+OCASTSemanticAnalyzer>>analyzeLocalVariableWrite: aLocalVariable
+
+	aLocalVariable scope outerNotOptimizedScope
+	~= scope outerNotOptimizedScope ifTrue: [ 
+		aLocalVariable markEscapingWrite ].
+	"only escaping when they will end up in different closures"
+	"if we write a variable in a loop, mark it as a repeated Write"
+	scope isInsideOptimizedLoop
+		ifTrue: [ aLocalVariable markRepeatedWrite ]
+		ifFalse: [ aLocalVariable markWrite ]
+
+
+OCASTClosureAnalyzer>>visitMethodNode: aMethodNode
+
+	"here look at the temps and make copying vars / tempVector out of them"
+
+	self visitArgumentNodes: aMethodNode arguments.
+	scope := aMethodNode scope.
+	scope moveEscapingWritesToTempVector.
+	scope copyEscapingReads.
+	self visitNode: aMethodNode body.
+	aMethodNode temporaries do: [ :each | self lookupAndFixBinding: each ]
+
+OCAbstractScope>>moveEscapingWritesToTempVector
+
+	self tempVars values
+		select: [ :each | each isEscapingWrite ]
+		thenDo: [ :each | self moveToVectorTemp: each ]
+
+OCAbstractScope>>moveToVectorTemp: aTempVar
+
+	self addVectorTemp: aTempVar.
+	self removeTemp: aTempVar
+```
+
+escapingWrite
+
+## 14.4 Returning from inside a block
+
+
+把**non-local returning block** (包含 return 语句的block) 传递或存储到变量中，不是个好主意。
+
+
 
