@@ -11,13 +11,12 @@ Lexically-scoped block closures 是Smalltalk中的基础，用于分支、循环
 - 在运行时，block 可以访问的变量被bound 在`定义它的Context`，而不是运行它的Context。
 - 临时变量编译时进行分析，block中引用的会标记 escapingWrite ，在heap 上分配
 - non-local return , 执行时退到创建block 的home context 的执行点。
-
-
-- Context: 表示程序执行点的Object。
-- Block 创建时捕获变量。
-- block return 改变程序flow
-- 程序如何执行，context，activation records，execution state
-- exception
+- context 表示程序执行点的状态
+- outerContext， thisContext， home
+- message 的执行过程
+- doesNotUnderstand:
+- stack frame
+- remote variable
 
 ## 14.1 Basic
 Block: Lambda表达式 + 创建时的environment .
@@ -376,6 +375,8 @@ defineBlock
 	| res |
 	self traceCr: 'defineBlock start'.
 	res := self arg: [ 
+		       thisContext home inspect.
+		       thisContext home sender copy inspect.
 		       self traceCr: 'block start'.
 		       1 isZero ifFalse: [ ^ 33 ].
 		       self traceCr: 'block end' ].
@@ -396,4 +397,75 @@ start end
 [^ 33] return 到了创建这个block 的 context 的 sender 那里（start），会退到创建这个block 的context的上一层。
 
 >When the return statement of the block is executed in the method evaluateBlock:, the execution discards the pending computation and returns to the method execution point that created the home context of the block. 
+
+
+```smalltalk
+thisContext home sender copy inspect.
+```
+可以确认当前 context 的 sender。
+
+
+## Context : representing method execution
+
+Context 表示程序执行状态的信息：
+- CompiledMethod bytecodes
+- pc，指向当前执行的bytecode 位置
+- 调用compiledMethod 的 message 的 receiver ， arguments
+- 临时变量
+- call stack
+- stackp  stack depth
+- sender
+
+使用伪变量 pseudo-variable thisContext 可以访问当前的执行点。
+
+inspect a context:
+
+```smalltalk
+first: arg
+
+	| temp |
+	temp := arg * 2.
+	thisContext copy inspect.
+	^ temp
+```
+
+![Inspect Context](images/deepintopharo_block_context_inspect.png)
+
+VM 会重复利用 context，因此代码中使用 thisContext copy 复制一个context instance。
+
+#### Block nesting and contexts
+
+block 都是在一个context内创建的，这个context就是 outer context。
+home context 就是block 在 method 层的context。
+
+outerContext
+
+嵌套的block 有各自不同的 outerContext，但是共享一个 home context。
+
+
+## Message execution
+
+context, method execution, block closure execution.
+
+### Sending a message
+
+向一个 receiver 发送一个消息，VM：
+1. 用 receiver object's header 找到它的 class
+2. 在 class method dictionary中查找method。如果找不到，就继续在每一个 superclass 中找。如果都找不到，VM 给 receiver 发送 doesNotUnderstand: （后来 ruby 中的 method_missing )
+3. 当找到一个合适的 method
+   a. check method header, 是否是 primitive ， 是的话就执行
+   b. 没有 primitive 或 primitive 失败，继续下面
+4. 创建新的 context ， 设置 pc, stack pointer, home context; 从 message sending context 里 copy arguments 和 receiver 到新的 context 里。
+5. 激活新的 context，开始执行新的method中的指令
+
+message send前的状态要记下来，因为message执行完毕后，要继续原来的执行。状态用 Context来保存，有很多context存在。
+当前执行状态的context 就是 active context。
+
+active context 中发出一个message ， 当前 active context 就会 suspended，一个新的context创建并激活。新的context 要记录它所 suspended 的那个context，这样return后会重新激活它，这就是 sender。
+
+### 实现
+
+
+block 访问 non-local variable, 这个remote variable不在block 的 context里，而是在 home context，通过 closure访问。
+为了效率，在 VM 层实现时，并不创建context 对象，而是直接使用 stack frames，这样在return 的时候，直接remove 掉stack frame。（像C），因此不需要高层的gc。对 block 中引用的 remote variable 要单独在 heap 上保存。
 
