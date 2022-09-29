@@ -469,3 +469,92 @@ active context 中发出一个message ， 当前 active context 就会 suspended
 block 访问 non-local variable, 这个remote variable不在block 的 context里，而是在 home context，通过 closure访问。
 为了效率，在 VM 层实现时，并不创建context 对象，而是直接使用 stack frames，这样在return 的时候，直接remove 掉stack frame。（像C），因此不需要高层的gc。对 block 中引用的 remote variable 要单独在 heap 上保存。
 
+
+## Continuation
+
+创建一个 Continuation instance:
+
+```smalltalk
+
+Object subclass: #Continuation
+	instanceVariableNames: 'values'
+	classVariableNames: ''
+	package: 'Kernel-Methods'
+
+
+Continuation class>>current
+
+	^ self fromContext: thisContext sender
+
+Continuation class>>fromContext: aStack
+
+	^ self new initializeFromContext: aStack
+
+Continuation>>initializeFromContext: aContext
+
+	| valueStream context |
+	valueStream := WriteStream on: (Array new: 20).
+	context := aContext.
+	[ context notNil ] whileTrue: [ 
+		valueStream nextPut: context.
+		1 to: context class instSize do: [ :i | 
+		valueStream nextPut: (context instVarAt: i) ].
+		1 to: context size do: [ :i | valueStream nextPut: (context at: i) ].
+		context := context sender ].
+	values := valueStream contents
+```
+
+当前调用者的context ,  thisContext sender . 初始化时将context 中的内容全部保存在 values 中。并一直上溯sender context，全部保存。创建 Continuation 的过程，就是在执行点，将当前的现场完整保存。
+
+保存 Continuation current 到instance var 中，发现 values 有 644 items。
+```smalltalk
+Bexp>>foo
+
+	| a |
+	k := Continuation current.
+	[ a := 0 ] value.
+
+	^ a
+```
+
+重新执行 continuation：
+
+
+```smalltalk
+Continuation>>value: anObject
+
+	"Invoke the continuation and answer anObject as return value."
+
+	self terminate: thisContext.
+	self restoreValues.
+	thisContext swapSender: values first.
+	^ anObject
+
+Continuation>>restoreValues
+
+	| valueStream context |
+	valueStream := values readStream.
+	[ valueStream atEnd ] whileFalse: [ 
+		context := valueStream next.
+		1 to: context class instSize do: [ :i | 
+		context instVarAt: i put: valueStream next ].
+		1 to: context size do: [ :i | context at: i put: valueStream next ] ]
+
+Context>>swapSender: coroutine
+
+	"Replace the receiver's sender with coroutine and answer the receiver's 
+	previous sender. For use in coroutining."
+
+	| oldSender |
+	oldSender := sender.
+	sender := coroutine.
+	^ oldSender
+```
+
+把当前 thisContext 停止，restoreValues 将保存在 continuation instance values 中的context 信息还原。将 thisContext swapSender ，从 continuation 停止的点重新执行。最后返回 anObject。
+
+
+swapSender: coroutine ， 协程。。
+
+## Coroutine
+
