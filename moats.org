@@ -1,0 +1,25 @@
+#+STARTUP: indent
+* The Little Book That Builds Wealth
+- 作者：Pat Dorsey
+- 作者是Morningstar公司的研究部负责人，另一本书《股市真规则》也很好。
+- 本书主要讲 Moats 护城河的概念。
+** The Game Plan
+Moats 护城河的概念是巴菲特在上世纪80年代左右介绍的，并成为投资圈广为人知的概念。投资者应该关注具有护城河的公司。
+
+** Economic Moats
+** Mistaken Moats
+** Intangible Assets
+- 无形资产
+** Switching Costs
+** The Network Effect
+** Cost Advantages
+** The Size Advantage
+** Eroding Moats
+- 侵蚀、削弱
+** Finding Moats
+** The Big Boss
+** Where the Rubber Meets the Road
+** What's a Moat Worth
+** Tools for Valuation
+** When to Sell
+** More than Numbers
