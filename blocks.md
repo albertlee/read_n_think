@@ -10,6 +10,7 @@ Lexically-scoped block closures 是Smalltalk中的基础，用于分支、循环
 重点：
 - 在运行时，block 可以访问的变量被bound 在`定义它的Context`，而不是运行它的Context。
 - 临时变量编译时进行分析，block中引用的会标记 escapingWrite ，在heap 上分配
+- non-local return , 执行时退到创建block 的home context 的执行点。
 
 
 - Context: 表示程序执行点的Object。
@@ -326,8 +327,73 @@ escapingWrite
 
 ## 14.4 Returning from inside a block
 
-
 把**non-local returning block** (包含 return 语句的block) 传递或存储到变量中，不是个好主意。
 
+method 执行的默认 return 是 message 的 receiver ， 使用显式 return (^) 语句返回一个不一样的值。return 结果给 caller。
 
+```smalltalk
+testExplicitReturn
+
+	self traceCr: 'one'.
+	0 isZero ifTrue: [ 
+		self traceCr: 'two'.
+		^ self ].
+	self traceCr: 'not printed'
+```
+
+block 中的 return 会让外部method 也 return ，最后的语句就不执行了。
+
+### Escaping behavior of non-local return
+
+直接退出method 调用：
+
+```smalltalk
+jumpingOut
+
+	#( 1 2 3 4 ) do: [ :each | 
+		self traceCr: each printString.
+		each = 3 ifTrue: [ ^ 3 ] ].
+	^ 42
+
+Bexp new jumpingOut . "3"
+```
+
+block 中的 return ，可以在很深的层上，执行时会直接跳出所有的层，并返回到 method caller。
+
+在异常机制引入前，一些很老的代码，使用传递 non-local return block 的方式。现在不建议这样做，因为会让程序流复杂，难以维护，引入bug。
+
+### Understanding return
+
+```smalltalk
+start
+	| res |
+	self traceCr: 'start start'.
+	res := self defineBlock.
+	self traceCr: 'start end'.
+	^ res
+
+defineBlock
+	| res |
+	self traceCr: 'defineBlock start'.
+	res := self arg: [ 
+		       self traceCr: 'block start'.
+		       1 isZero ifFalse: [ ^ 33 ].
+		       self traceCr: 'block end' ].
+	self traceCr: 'defineBlock end'.
+	^ res
+```
+
+例子执行结果：
+```
+start start
+  defineBlock start
+    arg start
+      evaluateBlock start
+        block start
+start end
+```
+
+[^ 33] return 到了创建这个block 的 context 的 sender 那里（start），会退到创建这个block 的context的上一层。
+
+>When the return statement of the block is executed in the method evaluateBlock:, the execution discards the pending computation and returns to the method execution point that created the home context of the block. 
 
