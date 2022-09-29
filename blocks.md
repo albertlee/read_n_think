@@ -78,7 +78,7 @@ Block: Lambda表达式 + 创建时的environment .
 
 
 ## Variable and blocks
-Block 可以有自己的临时变量，在block每次执行时初始化，并且是block local 的。
+local variable: Block 可以有自己的临时变量，在block每次执行时初始化，并且是block local 的。
 
 non-local variable
 
@@ -123,4 +123,12 @@ Bexp new setVarAndDefineBlock . "84"
 setVarAndDefineBlock 时创建一个 block，此时block中的 t 指向的是创建时的变量 t，值为 42 。 
 
 evalBlock: aBlock 执行时，临时变量 t := nil ，但并不影响 block 内的 t ，因此最后结果是 84.
+
+![Block Context](./images/deepintopharo_block_context.png)
+
+context, sender , setVarAndDefineBlock 被执行时，创建一个 context，在里面调用 evalBlock: ，此时 evalBlock： 的 context 对象中 sender指向之前调用它的context (setVarAndDefineBlock的)。
+
+aBlock 的 home Context 指向创建它时的 context。
+
+
 
